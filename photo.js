@@ -1,0 +1,1 @@
+window.RESUME_PHOTO = "";

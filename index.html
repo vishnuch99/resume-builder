@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,800;1,400;1,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="toolbar">
+    <span class="brand">Resume Builder</span>
+    <button id="btnArrange" title="Show move/delete controls on every item">Arrange</button>
+    <button id="btnLayout" title="Toggle the ATS-friendly single-column layout">Layout</button>
+    <span class="tsep"></span>
+    <button id="btnPrint" class="primary" title="Opens the print dialog — choose 'Save as PDF'">Export PDF</button>
+    <button id="btnDocx" title="Downloads a .docx file">Export DOCX</button>
+    <button id="btnJson" title="Back up your content as a JSON file">Export JSON</button>
+    <button id="btnImport" title="Restore content from a JSON backup">Import JSON</button>
+    <button id="btnReset" title="Restore the original resume content">Reset</button>
+    <span id="statusMsg"></span>
+    <span class="spacer"></span>
+    <span class="hint">Click text to edit &middot; Cmd/Ctrl+B bold</span>
+    <span class="hint" id="modeNote"></span>
+  </div>
+
+  <div class="page" id="page"></div>
+
+  <input type="file" id="photoInput" accept="image/*" hidden>
+  <input type="file" id="jsonInput" accept="application/json,.json" hidden>
+
+  <script src="photo.js"></script>
+  <script src="data.js"></script>
+  <script src="vendor/docx.umd.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

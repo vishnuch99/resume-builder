@@ -1,0 +1,316 @@
+/* Resume Builder — replica of the Enhancv-style two-column template */
+
+:root {
+  --navy: #2c3e50;      /* skill pill background */
+  --ink: #1f2229;       /* headings / primary text */
+  --body: #3d4145;      /* body text */
+  --muted: #8a8f94;     /* italic meta text */
+  --rule: #000;         /* contact bar rules */
+  --accent: #4a90d9;    /* editor focus color, not printed */
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #4b4f54;
+  font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Toolbar (screen only) ---------- */
+
+#toolbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #23262b;
+  color: #e8eaed;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  flex-wrap: wrap;
+}
+#toolbar .brand { font-weight: 700; margin-right: 8px; letter-spacing: .3px; }
+#toolbar button {
+  font: inherit;
+  padding: 6px 12px;
+  border: 1px solid #4a4f57;
+  border-radius: 6px;
+  background: #31353c;
+  color: #e8eaed;
+  cursor: pointer;
+}
+#toolbar button:hover { background: #3c4149; }
+#toolbar button.primary { background: var(--navy); border-color: var(--navy); }
+#toolbar button.primary:hover { background: #3a536b; }
+#toolbar button.active { background: #4a90d9; border-color: #4a90d9; color: #fff; }
+#toolbar .tsep { width: 1px; height: 22px; background: #4a4f57; margin: 0 4px; }
+#toolbar .spacer { flex: 1; }
+#toolbar .hint { color: #9aa0a6; font-size: 12px; max-width: 46ch; }
+#toolbar .hint.warn { color: #f0b54b; }
+#statusMsg { color: #7ee08a; font-size: 12px; min-width: 60px; }
+#statusMsg.error { color: #ff8a80; font-weight: 700; }
+
+/* ---------- Page ---------- */
+
+.page {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 88px auto 40px;
+  background: #fff;
+  color: var(--body);
+  padding: 9mm 10mm 10mm;
+  box-shadow: 0 4px 24px rgba(0,0,0,.5);
+  font-size: 8.6pt;
+  line-height: 1.32;
+}
+
+/* ---------- Header ---------- */
+
+.header { display: flex; gap: 6mm; align-items: flex-start; margin-bottom: 4mm; }
+
+.photo-wrap {
+  position: relative;
+  flex: 0 0 33mm;
+  width: 33mm; height: 33mm;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  background: #e8e8e8;
+}
+.photo-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-wrap .photo-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: #9aa0a6; font-size: 8pt; text-align: center; padding: 3mm;
+}
+.photo-wrap .photo-overlay {
+  position: absolute; inset: 0;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.45); color: #fff; font-size: 8pt; text-align: center;
+}
+.photo-wrap:hover .photo-overlay { display: flex; }
+
+.header-text { flex: 1; min-width: 0; }
+.name {
+  font-size: 23pt;
+  font-weight: 400;
+  color: var(--ink);
+  margin: 0 0 1mm;
+  line-height: 1.1;
+}
+.job-title { font-size: 11.5pt; color: #6d7278; margin: 0 0 2.2mm; }
+.summary { font-size: 8.6pt; text-align: justify; color: var(--body); }
+
+/* ---------- Contact bar ---------- */
+
+.contact {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 9mm;
+  flex-wrap: wrap;
+  border-top: 0.7mm solid var(--rule);
+  border-bottom: 0.7mm solid var(--rule);
+  margin: 0 -10mm 5mm;
+  padding: 2.6mm 10mm;
+  font-size: 8.8pt;
+  color: var(--ink);
+}
+.contact .citem { display: flex; align-items: center; gap: 1.8mm; white-space: nowrap; }
+.contact svg { width: 3.6mm; height: 3.6mm; flex: 0 0 auto; }
+.contact .csep { color: var(--muted); }
+.page.ats .contact { gap: 3mm; }
+
+/* ---------- Columns ---------- */
+
+.columns { display: flex; gap: 8mm; align-items: flex-start; }
+.col-left  { flex: 0 0 54%; min-width: 0; }
+.col-right { flex: 1; min-width: 0; }
+.col-single { max-width: 100%; }
+
+.section { margin-bottom: 5.5mm; }
+.section-head { position: relative; }
+.section-title {
+  font-size: 12.5pt;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: .02em;
+  margin: 0 0 2.6mm;
+}
+
+/* ---------- Entries (experience / education) ---------- */
+
+.entry { position: relative; margin-bottom: 4.2mm; break-inside: avoid; }
+.entry-title { font-size: 10.5pt; font-weight: 700; color: var(--ink); line-height: 1.25; }
+.org-line { display: flex; align-items: baseline; gap: 1.5mm; }
+.org { font-size: 10.5pt; color: #33373c; }
+.meta {
+  display: flex; justify-content: space-between; gap: 4mm;
+  font-size: 7.6pt; font-style: italic; color: var(--muted);
+  margin: 0.8mm 0 0.6mm;
+}
+.bullets-label { font-size: 7.6pt; font-style: italic; color: var(--muted); margin-bottom: 0.8mm; }
+
+ul.bullets { list-style: none; margin: 0; padding: 0; }
+ul.bullets li { position: relative; display: flex; margin-bottom: 1.6mm; }
+ul.bullets li .bmark { flex: 0 0 4mm; color: var(--body); }
+ul.bullets li .btxt { flex: 1; min-width: 0; }
+.col-left ul.bullets .btxt, .page.ats ul.bullets .btxt { text-align: justify; }
+
+/* ---------- Right column ---------- */
+
+.pill-wrap { display: flex; flex-wrap: wrap; gap: 1.8mm; }
+.pill {
+  background: var(--navy);
+  color: #fff;
+  font-size: 8.4pt;
+  padding: 1.1mm 2.6mm 1.3mm;
+  border-radius: 0.8mm;
+  position: relative;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.pill.outline { background: #fff; color: #43474c; border: 1px solid #b9bcbf; border-radius: 1.1mm; }
+
+.project { position: relative; margin-bottom: 3.4mm; break-inside: avoid; }
+.project-name { font-size: 9.6pt; color: var(--ink); line-height: 1.25; margin-bottom: 0.8mm; }
+.project ul.bullets { font-size: 8pt; }
+.project ul.bullets li { margin-bottom: 1mm; }
+.page.ats .project ul.bullets { font-size: 8.6pt; }
+
+.achievement { position: relative; margin-bottom: 2.6mm; break-inside: avoid; }
+.achievement-title { font-size: 9.6pt; color: var(--ink); margin-bottom: 0.5mm; }
+.achievement-desc { font-size: 7.8pt; font-style: italic; color: var(--muted); }
+
+.lang-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2.6mm 6mm; }
+.lang { position: relative; }
+.lang-name { font-size: 9.4pt; color: var(--ink); }
+.lang-level { font-size: 7.6pt; font-style: italic; color: var(--muted); }
+.lang-line { position: relative; margin-bottom: 1.4mm; }
+.lang-line .sep { color: var(--muted); }
+
+/* ---------- ATS single-column mode ---------- */
+
+.skills-line { font-size: 9pt; color: var(--ink); line-height: 1.6; }
+.skills-line .sep { color: var(--body); }
+.inline-item { position: relative; display: inline-block; }
+
+/* ---------- Link icon ---------- */
+
+.linkicon {
+  cursor: pointer;
+  color: #9aa0a6;
+  text-decoration: none;
+  font-size: 8pt;
+  flex: 0 0 auto;
+}
+.linkicon svg { width: 2.8mm; height: 2.8mm; vertical-align: baseline; }
+.linkicon.unset { opacity: 0; }
+.entry:hover .linkicon.unset, .project:hover .linkicon.unset { opacity: .45; }
+
+/* ---------- Editing affordances (screen only) ---------- */
+
+[contenteditable] { outline: none; border-radius: 2px; }
+[contenteditable]:hover { box-shadow: 0 0 0 1px #d5d8db; }
+[contenteditable]:focus { box-shadow: 0 0 0 1.5px var(--accent); background: #f5faff; }
+[contenteditable] b, [contenteditable] strong { font-weight: 700; }
+
+/* Control cluster: move up/down + delete. Sits INSIDE the item's box so it
+   stays hoverable; always visible when Arrange mode is on (body.arrange). */
+
+.item { position: relative; }
+
+.ctl {
+  position: absolute;
+  top: 0; right: 0;
+  z-index: 5;
+  display: none;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255,255,255,.97);
+  border: 1px solid #dcdfe2;
+  border-radius: 5px;
+  box-shadow: 0 1px 5px rgba(0,0,0,.22);
+}
+.item:hover > .ctl, body.arrange .ctl { display: inline-flex; }
+
+.ctl button {
+  width: 19px; height: 19px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: #eef0f2;
+  color: #3d4145;
+  font-size: 12px;
+  line-height: 19px;
+  text-align: center;
+  cursor: pointer;
+}
+.ctl button:hover { background: var(--navy); color: #fff; }
+.ctl button.rm { background: #fdecec; color: #c0392b; }
+.ctl button.rm:hover { background: #e05b5b; color: #fff; }
+
+/* pills & inline skills: controls float above the chip; shown in Arrange mode
+   only (a hover control outside a tiny chip is exactly the annoyance we're fixing) */
+.pill > .ctl, .inline-item > .ctl {
+  display: none;
+  top: -24px; right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.pill:hover > .ctl, .inline-item:hover > .ctl { display: none; }
+body.arrange .pill > .ctl, body.arrange .inline-item > .ctl { display: inline-flex; }
+body.arrange .pill-wrap { padding-top: 24px; row-gap: 8mm; }
+body.arrange .skills-line { line-height: 3.2; }
+
+/* give hover/arrange controls room so they don't sit on top of the text */
+body.arrange ul.bullets li,
+body.arrange .lang, body.arrange .lang-line,
+body.arrange .achievement,
+body.arrange .entry, body.arrange .project { padding-right: 18mm; }
+
+/* section heads: reorder arrows to the right of the title */
+.section-head > .ctl { top: 2px; }
+
+.add-btn {
+  font: inherit;
+  font-size: 7.8pt;
+  color: #7a8087;
+  background: none;
+  border: 1px dashed #c3c7cb;
+  border-radius: 3px;
+  padding: 0.6mm 2mm;
+  cursor: pointer;
+  margin-top: 1mm;
+  display: none;
+}
+.section:hover .add-btn, .entry:hover .add-btn, body.arrange .add-btn { display: inline-block; }
+.add-btn:hover { color: var(--navy); border-color: var(--navy); }
+
+/* ---------- Print ---------- */
+
+@page { size: A4; margin: 0; }
+
+@media print {
+  html, body { background: #fff; }
+  #toolbar, .ctl, .add-btn, .photo-overlay { display: none !important; }
+  .page {
+    width: 210mm;
+    min-height: auto;
+    margin: 0;
+    box-shadow: none;
+  }
+  body.arrange .pill-wrap { padding-top: 0; row-gap: 1.8mm; }
+  body.arrange .skills-line { line-height: 1.6; }
+  body.arrange ul.bullets li, body.arrange .lang, body.arrange .lang-line,
+  body.arrange .achievement { padding-right: 0; }
+  [contenteditable]:hover, [contenteditable]:focus { box-shadow: none; background: none; }
+  .linkicon.unset { display: none; }
+  .section, .entry, .project, .achievement { break-inside: avoid; }
+}
