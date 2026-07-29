@@ -199,12 +199,6 @@ const SECTION_BODY = {
   },
 
   skills() {
-    if (isAts()) {
-      // Plain comma-separated text parses best in ATS systems; each skill stays editable.
-      return `<div class="skills-line">${data.skills
-        .map((s, i) => `<span class="inline-item item">${ctl(`skills.${i}`, { horizontal: true })}${ed(`skills.${i}`, "", "span")}</span>`)
-        .join(`<span class="sep">, </span>`)}</div>` + addBtn("skill", "skills", "+ skill");
-    }
     return `<div class="pill-wrap">${data.skills
       .map((s, i) => `<span class="pill item">${ctl(`skills.${i}`, { horizontal: true })}${ed(`skills.${i}`, "", "span")}</span>`)
       .join("")}</div>` + addBtn("skill", "skills", "+ skill");
@@ -669,16 +663,12 @@ async function buildDocxBlob() {
     },
     skills() {
       const out = [heading(data.headings.skills)];
-      if (ats) {
-        out.push(new P({ children: [new T({ text: data.skills.map(htmlToText).join(", "), font: FONT, size: 18, color: BODY })], spacing: { after: 120 } }));
-      } else {
-        const runs = [];
-        data.skills.forEach((s, i) => {
-          runs.push(new T({ text: ` ${htmlToText(s)} `, font: FONT, size: 17, color: "FFFFFF", shading: { type: ShadingType.CLEAR, fill: NAVY } }));
-          if (i < data.skills.length - 1) runs.push(new T({ text: "  ", font: FONT, size: 17 }));
-        });
-        out.push(new P({ children: runs, spacing: { after: 120, line: 340 } }));
-      }
+      const runs = [];
+      data.skills.forEach((s, i) => {
+        runs.push(new T({ text: ` ${htmlToText(s)} `, font: FONT, size: 17, color: "FFFFFF", shading: { type: ShadingType.CLEAR, fill: NAVY } }));
+        if (i < data.skills.length - 1) runs.push(new T({ text: "  ", font: FONT, size: 17 }));
+      });
+      out.push(new P({ children: runs, spacing: { after: 120, line: 340 } }));
       return out;
     },
     projects() {
