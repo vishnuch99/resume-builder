@@ -55,9 +55,9 @@ html, body {
 #toolbar .hint.warn { color: #f0b54b; }
 #statusMsg { color: #7ee08a; font-size: 12px; min-width: 60px; }
 
-/* Sections dropdown */
-#sectionsWrap { position: relative; display: inline-flex; }
-.sections-panel {
+/* Toolbar dropdowns (Sections, Contact) */
+.drop-wrap { position: relative; display: inline-flex; }
+.drop-panel {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -69,7 +69,14 @@ html, body {
   box-shadow: 0 6px 18px rgba(0,0,0,.45);
   z-index: 60;
 }
-.sections-panel[hidden] { display: none; }
+.drop-panel[hidden] { display: none; }
+.contact-panel { width: 400px; max-height: calc(100vh - 80px); overflow-y: auto; }
+.sp-sub { font-size: 11px; color: #9aa0a6; margin: 6px 0 2px; }
+.sp-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; }
+/* icons are drawn dark for the page; give them a light chip on the dark panel */
+.sp-ico { display: inline-flex; padding: 2px; background: #fff; border-radius: 3px; }
+.sp-ico svg { width: 12px; height: 12px; }
+#toolbar .sp-add { margin-top: 8px; padding: 3px 10px; font-size: 12px; border-style: dashed; }
 .sp-group + .sp-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid #3a3e45; }
 .sp-head { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #9aa0a6; margin-bottom: 4px; }
 .sp-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
@@ -138,7 +145,7 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 9mm;
+  gap: 1.6mm 9mm;  /* tight rows when many items wrap */
   flex-wrap: wrap;
   border-top: 0.7mm solid var(--rule);
   border-bottom: 0.7mm solid var(--rule);
@@ -149,8 +156,11 @@ html, body {
 }
 .contact .citem { display: flex; align-items: center; gap: 1.8mm; white-space: nowrap; }
 .contact svg { width: 3.6mm; height: 3.6mm; flex: 0 0 auto; }
-.contact .csep { color: var(--muted); }
-.page.ats .contact { gap: 3mm; }
+.contact .clink { color: inherit; text-decoration: none; cursor: text; }
+.contact .citem [contenteditable] { display: inline-block; min-width: 1.5em; }
+.page.ats .contact { gap: 1.6mm 3mm; }
+/* ATS separators: drawn by CSS so an empty (unprinted) item never leaves a stray "|" */
+.page.ats .citem ~ .citem::before { content: "|"; color: var(--muted); margin-right: 1.2mm; }
 
 /* ---------- Columns ---------- */
 
@@ -240,7 +250,68 @@ ul.bullets li .btxt { flex: 1; min-width: 0; }
 .linkicon.unset { opacity: 0; }
 .entry:hover .linkicon.unset, .project:hover .linkicon.unset { opacity: .45; }
 
+/* ---------- Inline links (any text) ---------- */
+
+/* a soft underline so links still read as links on paper */
+.page [contenteditable] a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 0.6px;
+  text-underline-offset: 0.45mm;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+}
+
+/* Format bubble: B / I / Link on a selection; open / edit / remove on a link */
+#fmtBubble {
+  position: absolute;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  background: #23262b;
+  color: #e8eaed;
+  border: 1px solid #4a4f57;
+  border-radius: 7px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  font: 12px/1 "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+#fmtBubble[hidden] { display: none; }
+#fmtBubble button {
+  font: inherit;
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+#fmtBubble button:hover { background: #3c4149; }
+#fmtBubble button.fb-primary { background: #4a90d9; color: #fff; }
+#fmtBubble svg { width: 13px; height: 13px; flex: 0 0 auto; }
+#fmtBubble .fb-sep { width: 1px; height: 16px; background: #4a4f57; margin: 0 2px; }
+#fmtBubble .fb-url {
+  display: inline-flex; align-items: center; gap: 5px;
+  max-width: 260px; padding: 0 6px;
+  color: #8ab4f8; text-decoration: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#fmtBubble .fb-url:hover { text-decoration: underline; }
+#fmtBubble .fb-input {
+  width: 270px; height: 24px;
+  padding: 0 8px;
+  border: 1px solid #4a4f57; border-radius: 4px;
+  background: #31353c; color: #e8eaed;
+  font: inherit; outline: none;
+}
+#fmtBubble .fb-input:focus { border-color: #4a90d9; }
+
 /* ---------- Editing affordances (screen only) ---------- */
+
+/* hint for an empty field (e.g. a newly added contact item); never printed */
+[contenteditable][data-ph]:empty::before { content: attr(data-ph); color: #b3b7bb; font-style: italic; }
 
 [contenteditable] { outline: none; border-radius: 2px; }
 [contenteditable]:hover { box-shadow: 0 0 0 1px #d5d8db; }
@@ -329,7 +400,10 @@ body.arrange .entry, body.arrange .project { padding-right: 18mm; }
 
 @media print {
   html, body { background: #fff; }
-  #toolbar, .ctl, .add-btn, .photo-overlay { display: none !important; }
+  #toolbar, #fmtBubble, .ctl, .add-btn, .photo-overlay { display: none !important; }
+  .contact .citem.empty { display: none; }
+  .page.ats .citem ~ .citem::before { content: none; }
+  .page.ats .citem:not(.empty) ~ .citem:not(.empty)::before { content: "|"; }
   .page {
     width: 210mm;
     min-height: auto;

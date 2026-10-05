@@ -28,10 +28,13 @@ async function loadData() {
 // Fill in any keys added by newer versions of the app (saved blobs may predate them).
 function migrate(d) {
   const def = window.RESUME_DATA;
+  // Saves from before the Contact menu showed exactly these four; don't add new defaults to them.
+  if (d.contactFields === undefined && d.contact) d.contactFields = ["email", "phone", "location", "linkedin"];
   for (const k of Object.keys(def)) if (d[k] === undefined) d[k] = JSON.parse(JSON.stringify(def[k]));
   for (const k of Object.keys(def.headings)) if (d.headings[k] === undefined) d.headings[k] = def.headings[k];
   d.settings = Object.assign({ ats: false }, d.settings);
   normalizeSections(d);
+  normalizeContact(d);
   return d;
 }
 
@@ -48,6 +51,17 @@ function normalizeSections(d) {
   d.sectionOrder = { left: clean(order.left), right: clean(order.right) };
   for (const k of known) if (!seen.has(k)) d.sectionOrder.right.push(k);
   d.hiddenSections = [...new Set(Array.isArray(d.hiddenSections) ? d.hiddenSections : [])].filter((k) => known.includes(k));
+}
+
+// contactFields lists the shown contact items in order: known keys, or custom keys that have a value slot.
+function normalizeContact(d) {
+  if (!d.contact || typeof d.contact !== "object") d.contact = {};
+  const seen = new Set();
+  d.contactFields = (Array.isArray(d.contactFields) ? d.contactFields : []).filter((k) => {
+    if (seen.has(k) || !(CONTACT_FIELDS[k] || (isCustomContact(k) && k in d.contact))) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 let saveTimer = null;
@@ -107,30 +121,66 @@ function arrayAt(path) {
 
 /* ---------------- sanitizing ---------------- */
 
-const ALLOWED_TAGS = new Set(["B", "STRONG", "I", "EM", "U", "BR"]);
+// <a> is allowed too, but keeps only an href with a safe scheme, and never nests.
+const ALLOWED_TAGS = new Set(["B", "STRONG", "I", "EM", "U", "BR", "A"]);
 function sanitizeHtml(html) {
   const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
   const root = doc.body.firstChild;
-  (function clean(node) {
+  (function clean(node, inLink) {
     [...node.childNodes].forEach((n) => {
       if (n.nodeType === 1) {
-        clean(n);
-        if (!ALLOWED_TAGS.has(n.tagName)) {
+        const href = n.tagName === "A" && !inLink ? safeHref(n.getAttribute("href")) : "";
+        clean(n, inLink || !!href);
+        if (!ALLOWED_TAGS.has(n.tagName) || (n.tagName === "A" && !href)) {
           while (n.firstChild) node.insertBefore(n.firstChild, n);
           n.remove();
         } else {
           [...n.attributes].forEach((a) => n.removeAttribute(a.name));
+          if (href) n.setAttribute("href", href);
         }
       } else if (n.nodeType !== 3) {
         n.remove();
       }
     });
-  })(root);
+  })(root, false);
   return root.innerHTML;
 }
 
 function esc(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/* ---------------- links ---------------- */
+
+const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+const PHONE_RE = /^\+?[\d\s().-]{6,}$/;
+const URL_RE = /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(:\d+)?([/?#]\S*)?$/i;
+
+function safeHref(href) {
+  const h = String(href || "").trim();
+  return /^(https?:\/\/|mailto:|tel:)/i.test(h) ? h : "";
+}
+
+// Turn what someone typed or pasted ("github.com/me", "me@x.com", "+1 555 0100") into a link; "" if it can't be one.
+function normalizeUrl(input) {
+  const t = String(input || "").trim();
+  if (!t) return "";
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(t)) return t;
+  if (EMAIL_RE.test(t)) return "mailto:" + t;
+  if (PHONE_RE.test(t)) return "tel:" + t.replace(/[^\d+]/g, "");
+  if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(t)) return "";  // another scheme (javascript:, ftp:, …)
+  return "https://" + t.replace(/^\/+/, "");
+}
+
+// The link a contact item's plain text implies. kind: email | phone | url | text | auto (guess).
+function linkFor(text, kind = "auto") {
+  const t = text.trim();
+  if (!t || kind === "text") return "";
+  if (kind === "email" || (kind === "auto" && EMAIL_RE.test(t))) return EMAIL_RE.test(t) ? "mailto:" + t : "";
+  if (kind === "phone" || (kind === "auto" && PHONE_RE.test(t))) {
+    return t.replace(/\D/g, "").length >= 5 ? "tel:" + t.replace(/[^\d+]/g, "") : "";
+  }
+  return URL_RE.test(t) ? normalizeUrl(t) : "";
 }
 
 /* ---------------- icons ---------------- */
@@ -140,8 +190,111 @@ const ICONS = {
   phone: `<svg viewBox="0 0 24 24" fill="#3d4145"><path d="M6.6 10.8a15.9 15.9 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.2.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>`,
   location: `<svg viewBox="0 0 24 24" fill="#3d4145"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>`,
   linkedin: `<svg viewBox="0 0 24 24"><rect width="24" height="24" rx="3" fill="#0a66c2"/><path fill="#fff" d="M7.1 9.2H4.6V19h2.5V9.2zM5.8 8a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM19.4 13.6c0-2.7-1.5-4.6-3.9-4.6-1.3 0-2.2.7-2.6 1.5V9.2h-2.5V19h2.5v-5.2c0-1.2.6-2.1 1.8-2.1 1.1 0 1.7.8 1.7 2.1V19h2.5v-5.4h.5z"/></svg>`,
-  external: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>`
+  external: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>`,
+  link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>`
 };
+
+// Contact-bar glyphs: line icons for generic things, letter badges for brands (one consistent, recolour-free style).
+const lineIcon = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="#3d4145" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const badge = (t, size = t.length > 1 ? 11 : 14) =>
+  `<svg viewBox="0 0 24 24"><rect width="24" height="24" rx="4" fill="#3d4145"/><text x="12" y="${12 + size * 0.36}" text-anchor="middle" font-family="Lato, Helvetica, Arial, sans-serif" font-weight="700" font-size="${size}" fill="#fff">${t}</text></svg>`;
+
+Object.assign(ICONS, {
+  website: lineIcon(`<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>`),
+  portfolio: lineIcon(`<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>`),
+  blog: lineIcon(`<path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/>`),
+  github: `<svg viewBox="0 0 16 16" fill="#3d4145"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>`,
+  gitlab: badge("GL"),
+  stackoverflow: badge("SO"),
+  kaggle: badge("k"),
+  leetcode: badge("LC"),
+  huggingface: badge("HF"),
+  behance: badge("Bē"),
+  dribbble: badge("Dr"),
+  artstation: badge("AS"),
+  youtube: `<svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="5" fill="#3d4145"/><path d="M10 8.5v7l6-3.5z" fill="#fff"/></svg>`,
+  instagram: lineIcon(`<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r=".4"/>`),
+  imdb: badge("IMDb", 7.5),
+  orcid: badge("iD"),
+  scholar: lineIcon(`<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2.5 9 2.5 12 0v-5M22 9v5"/>`),
+  researchgate: badge("RG"),
+  x: badge("X"),
+  bluesky: badge("bs"),
+  availability: lineIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`),
+  workauth: lineIcon(`<path d="M6 3h9l4 4v14H6z"/><path d="M9 14l2 2 4-4"/>`),
+  relocation: lineIcon(`<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>`),
+  license: lineIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.5 1.8-2.2 3-2.2s2.4.7 3 2.2M15 10h3M15 14h3"/>`),
+  clearance: lineIcon(`<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/>`),
+  driving: lineIcon(`<path d="M3 13l2-6h14l2 6v5H3z"/><path d="M3 13h18"/><circle cx="7" cy="15.5" r=".6"/><circle cx="17" cy="15.5" r=".6"/>`),
+  pronouns: lineIcon(`<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.5-7 8-7s7 2.5 8 7"/>`),
+  nationality: lineIcon(`<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>`),
+  dob: lineIcon(`<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>`),
+  customLink: lineIcon(`<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>`),
+  customText: lineIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/>`)
+});
+
+/* ---------------- contact fields ----------------
+   data.contact holds the values (kept while a field is unticked); data.contactFields the shown keys, in order.
+   kind decides the automatic link: email → mailto:, phone → tel:, url → https://, text → none.
+   Custom items (custom1, custom2, …) guess their link from the text. */
+
+const CONTACT_GROUPS = ["Basics", "Profiles & portfolio", "Code & data", "Creative & media", "Academic", "Social", "Other details"];
+const CONTACT_FIELDS = {
+  email:         { label: "Email", group: "Basics", kind: "email", ph: "you@example.com" },
+  phone:         { label: "Phone", group: "Basics", kind: "phone", ph: "+1 555 0100" },
+  location:      { label: "Location", group: "Basics", kind: "text", ph: "City, Country" },
+  website:       { label: "Website", group: "Basics", kind: "url", ph: "yourname.com" },
+  linkedin:      { label: "LinkedIn", group: "Profiles & portfolio", kind: "url", ph: "linkedin.com/in/username" },
+  portfolio:     { label: "Portfolio", group: "Profiles & portfolio", kind: "url", ph: "yourportfolio.com" },
+  blog:          { label: "Blog / Newsletter", group: "Profiles & portfolio", kind: "url", ph: "yourblog.com" },
+  github:        { label: "GitHub", group: "Code & data", kind: "url", ph: "github.com/username" },
+  gitlab:        { label: "GitLab", group: "Code & data", kind: "url", ph: "gitlab.com/username" },
+  stackoverflow: { label: "Stack Overflow", group: "Code & data", kind: "url", ph: "stackoverflow.com/users/…" },
+  kaggle:        { label: "Kaggle", group: "Code & data", kind: "url", ph: "kaggle.com/username" },
+  leetcode:      { label: "LeetCode", group: "Code & data", kind: "url", ph: "leetcode.com/u/username" },
+  huggingface:   { label: "Hugging Face", group: "Code & data", kind: "url", ph: "huggingface.co/username" },
+  behance:       { label: "Behance", group: "Creative & media", kind: "url", ph: "behance.net/username" },
+  dribbble:      { label: "Dribbble", group: "Creative & media", kind: "url", ph: "dribbble.com/username" },
+  artstation:    { label: "ArtStation", group: "Creative & media", kind: "url", ph: "artstation.com/username" },
+  youtube:       { label: "YouTube", group: "Creative & media", kind: "url", ph: "youtube.com/@channel" },
+  imdb:          { label: "IMDb", group: "Creative & media", kind: "url", ph: "imdb.com/name/nm…" },
+  orcid:         { label: "ORCID", group: "Academic", kind: "url", ph: "orcid.org/0000-0000-0000-0000" },
+  scholar:       { label: "Google Scholar", group: "Academic", kind: "url", ph: "Google Scholar (select it to add the link)" },
+  researchgate:  { label: "ResearchGate", group: "Academic", kind: "url", ph: "researchgate.net/profile/…" },
+  x:             { label: "X / Twitter", group: "Social", kind: "url", ph: "x.com/username" },
+  bluesky:       { label: "Bluesky", group: "Social", kind: "url", ph: "username.bsky.social" },
+  instagram:     { label: "Instagram", group: "Social", kind: "url", ph: "instagram.com/username" },
+  availability:  { label: "Availability / notice", group: "Other details", kind: "text", ph: "Available: immediately" },
+  workauth:      { label: "Work authorization / visa", group: "Other details", kind: "text", ph: "Work authorization: US citizen" },
+  relocation:    { label: "Relocation / remote", group: "Other details", kind: "text", ph: "Open to relocation" },
+  license:       { label: "License / registration no.", group: "Other details", kind: "text", ph: "License: RN #123456" },
+  clearance:     { label: "Security clearance", group: "Other details", kind: "text", ph: "Clearance: Secret" },
+  driving:       { label: "Driving licence", group: "Other details", kind: "text", ph: "Driving licence: full (B)" },
+  pronouns:      { label: "Pronouns", group: "Other details", kind: "text", ph: "they/them" },
+  nationality:   { label: "Nationality", group: "Other details", kind: "text", ph: "Nationality: …" },
+  dob:           { label: "Date of birth", group: "Other details", kind: "text", ph: "Date of birth: DD/MM/YYYY" }
+};
+
+function isCustomContact(key) {
+  return /^custom\d+$/.test(key);
+}
+function contactField(key) {
+  return CONTACT_FIELDS[key] || { label: "Custom item", group: "Custom", kind: "auto", ph: "Anything: a link, a handle, a detail" };
+}
+function contactLabel(key) {
+  if (!isCustomContact(key)) return contactField(key).label;
+  const t = htmlToText(data.contact[key] || "").trim();
+  return t ? (t.length > 28 ? t.slice(0, 27) + "…" : t) : "Custom item";
+}
+// No automatic link when the text already carries its own (an inline link someone added).
+function contactHref(key) {
+  const v = data.contact[key] || "";
+  return /<a\s/i.test(v) ? "" : linkFor(htmlToText(v), contactField(key).kind);
+}
+function contactIcon(key) {
+  if (!isCustomContact(key)) return ICONS[key] || ICONS.customText;
+  return contactHref(key) ? ICONS.customLink : ICONS.customText;
+}
 
 /* ---------------- building blocks ---------------- */
 
@@ -150,9 +303,10 @@ function isAts() {
   return !!(data.settings && data.settings.ats);
 }
 
-function ed(path, cls = "", tag = "div") {
+// ph: a screen-only hint shown while the field is empty.
+function ed(path, cls = "", tag = "div", ph = "") {
   const v = getByPath(data, path) ?? "";
-  return `<${tag} class="${cls}" contenteditable="true" spellcheck="false" data-path="${path}">${v}</${tag}>`;
+  return `<${tag} class="${cls}" contenteditable="true" spellcheck="false" data-path="${path}"${ph ? ` data-ph="${esc(ph)}"` : ""}>${v}</${tag}>`;
 }
 
 // Control cluster: move up/down (or left/right) + optional delete.
@@ -368,14 +522,16 @@ function render() {
       <div class="photo-overlay">Change<br>photo</div>
     </div>`;
 
-  const contactItems = [
-    ["email", "contact.email"],
-    ["phone", "contact.phone"],
-    ["location", "contact.location"],
-    ["linkedin", "contact.linkedin"]
-  ]
-    .map(([icon, path]) => `<span class="citem">${ats ? "" : ICONS[icon]}${ed(path, "", "span")}</span>`)
-    .join(ats ? `<span class="csep">|</span>` : "");
+  // Each item is wrapped in its implied link (mailto:/tel:/https://) so it's clickable in the PDF.
+  // A value that already holds an inline link gets a plain wrapper: <a> can't nest.
+  // ATS "|" separators come from CSS, so empty items (hidden in print) don't leave stray ones.
+  const contactItems = data.contactFields.map((k) => {
+    const v = data.contact[k] || "";
+    const href = contactHref(k);
+    const wrap = /<a\s/i.test(v) ? "span" : "a";
+    return `<span class="citem${htmlToText(v).trim() ? "" : " empty"}">${ats ? "" : contactIcon(k)}<${wrap} class="clink"${
+      href ? ` href="${esc(href)}"` : ""}>${ed(`contact.${k}`, "", "span", contactField(k).ph)}</${wrap}></span>`;
+  }).join("");
 
   const leftKeys = visibleSections("left");
   const rightKeys = visibleSections("right");
@@ -411,7 +567,9 @@ function updateToolbar() {
   document.getElementById("btnLayout").textContent = ats ? "Layout: ATS (1 col)" : "Layout: Original (2 col)";
   document.getElementById("btnArrange").classList.toggle("active", document.body.classList.contains("arrange"));
   document.getElementById("btnSections").classList.toggle("active", !document.getElementById("sectionsPanel").hidden);
+  document.getElementById("btnContact").classList.toggle("active", !document.getElementById("contactPanel").hidden);
   renderSectionsPanel();
+  renderContactPanel();
   const note = document.getElementById("modeNote");
   if (HTTP_MODE) {
     note.textContent = "Auto-saving to resume-data.json";
@@ -454,6 +612,39 @@ function renderSectionsPanel() {
     `<div class="sp-note">Unchecked sections are hidden, not deleted — their content is kept.</div>`;
 }
 
+// Toolbar "Contact" panel: shown items in order (reorderable), then everything else by group, ready to tick.
+function renderContactPanel() {
+  const ico = (k) => `<span class="sp-ico">${contactIcon(k)}</span>`;
+  const shown = data.contactFields.map((k) => `
+    <div class="sp-row">
+      <label><input type="checkbox" data-op="toggle" data-key="${k}" checked> ${ico(k)} ${esc(contactLabel(k))}</label>
+      <button data-op="up" data-key="${k}" title="Move left">↑</button>
+      <button data-op="down" data-key="${k}" title="Move right">↓</button>
+    </div>`).join("");
+  const off = (k) => `
+    <div class="sp-row">
+      <label><input type="checkbox" data-op="toggle" data-key="${k}"> ${ico(k)} ${esc(contactLabel(k))}</label>
+      ${isCustomContact(k) ? `<button data-op="delete" data-key="${k}" title="Delete this custom item">×</button>` : ""}
+    </div>`;
+  const groups = [...CONTACT_GROUPS, "Custom"].map((g) => {
+    const keys = g === "Custom"
+      ? Object.keys(data.contact).filter((k) => isCustomContact(k) && !data.contactFields.includes(k))
+      : Object.keys(CONTACT_FIELDS).filter((k) => CONTACT_FIELDS[k].group === g && !data.contactFields.includes(k));
+    return keys.length ? `<div class="sp-sub">${g}</div><div class="sp-grid">${keys.map(off).join("")}</div>` : "";
+  }).join("");
+  document.getElementById("contactPanel").innerHTML = `
+    <div class="sp-group">
+      <div class="sp-head">Shown (in order)</div>
+      ${shown || `<div class="sp-empty">(none) — tick something below</div>`}
+    </div>
+    <div class="sp-group">
+      <div class="sp-head">Add more</div>
+      ${groups}
+      <button class="sp-add" data-op="custom">+ Custom item</button>
+    </div>
+    <div class="sp-note">Unticked items keep what you typed. Emails, phone numbers and web addresses become clickable links in the PDF and DOCX.</div>`;
+}
+
 /* ---------------- templates for "add" ---------------- */
 
 const TEMPLATES = {
@@ -489,20 +680,60 @@ const pageEl = document.getElementById("page");
 pageEl.addEventListener("input", (e) => {
   const el = e.target.closest("[contenteditable]");
   if (!el || !el.dataset.path || !data) return;
+  // A cleared field often keeps a stray <br>; drop it so the :empty placeholder shows again.
+  if (el.dataset.ph && !el.textContent.trim() && el.innerHTML) el.innerHTML = "";
   setByPath(data, el.dataset.path, sanitizeHtml(el.innerHTML));
+  if (el.closest(".citem")) syncContactItem(el);
   saveSoon();
 });
 
-// paste as plain text so outside formatting doesn't leak in
+// Text edits don't re-render, so keep a contact item's empty state and implied link current as you type.
+function syncContactItem(el) {
+  const key = el.dataset.path.split(".")[1];
+  el.closest(".citem").classList.toggle("empty", !el.textContent.trim());
+  const wrap = el.closest(".clink");
+  const href = contactHref(key);
+  if (href) wrap.setAttribute("href", href);
+  else wrap.removeAttribute("href");
+}
+
+// Paste as plain text so outside formatting doesn't leak in. Pasting a lone URL over selected text links it.
 pageEl.addEventListener("paste", (e) => {
   if (!e.target.closest("[contenteditable]")) return;
   e.preventDefault();
   const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+  const t = text.trim();
+  const ctx = selectionCtx();
+  if (ctx && !ctx.collapsed && (/^(https?:\/\/|mailto:|tel:)\S+$/i.test(t) || URL_RE.test(t) || EMAIL_RE.test(t))) {
+    const url = normalizeUrl(t);
+    if (url) {
+      linkSelection(ctx, url);
+      return;
+    }
+  }
   document.execCommand("insertText", false, text);
+});
+
+pageEl.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+    const ctx = selectionCtx();
+    if (!ctx) return;
+    e.preventDefault();
+    if (ctx.collapsed && !ctx.anchor) flashStatus("Select the text you want to link first");
+    else openLinkInput(ctx);
+  }
 });
 
 pageEl.addEventListener("click", (e) => {
   if (!data) return;
+
+  // Links in editable text don't navigate (a click is for placing the caret); Cmd/Ctrl-click opens them.
+  const a = e.target.closest("a[href]");
+  if (a && !a.classList.contains("linkicon")) {
+    e.preventDefault();
+    if (e.metaKey || e.ctrlKey) window.open(a.href, "_blank", "noopener");
+    return;
+  }
 
   const secMv = e.target.closest(".sec-mv");
   if (secMv) {
@@ -591,6 +822,167 @@ document.getElementById("photoInput").addEventListener("change", (e) => {
   e.target.value = "";
 });
 
+/* ---------------- format bubble ----------------
+   Selecting text pops up B / I / Link; with the caret in a link it offers open / edit / remove.
+   Also: Cmd/Ctrl+K links the selection, pasting a URL over a selection links it, Cmd/Ctrl-click opens a link. */
+
+const bubble = document.createElement("div");
+bubble.id = "fmtBubble";
+bubble.hidden = true;
+document.body.appendChild(bubble);
+let bubbleMode = null;  // "format" | "link" | "input"
+let bubbleCtx = null;   // { host, range, anchor, collapsed }
+
+// The current selection, if it sits inside exactly one bound editable on the page.
+function selectionCtx() {
+  const sel = document.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const node = range.commonAncestorContainer;
+  const elNode = node.nodeType === 1 ? node : node.parentElement;
+  const host = elNode && elNode.closest("#page [contenteditable][data-path]");
+  if (!host) return null;
+  const a = elNode.closest("a");
+  return { host, range: range.cloneRange(), anchor: a && host.contains(a) ? a : null, collapsed: range.collapsed };
+}
+
+function hideBubble() {
+  bubble.hidden = true;
+  bubbleMode = bubbleCtx = null;
+}
+
+function showBubble(mode, ctx) {
+  const same = mode === bubbleMode && bubbleCtx && ctx.anchor === bubbleCtx.anchor;
+  bubbleMode = mode;
+  bubbleCtx = ctx;
+  if (!same) {
+    const href = ctx.anchor ? ctx.anchor.getAttribute("href") : "";
+    const shown = href.replace(/^(https?:\/\/|mailto:|tel:)/i, "").replace(/\/$/, "");
+    bubble.innerHTML = mode === "format" ? `
+      <button data-cmd="bold" title="Bold (Cmd/Ctrl+B)"><b>B</b></button>
+      <button data-cmd="italic" title="Italic (Cmd/Ctrl+I)"><i>I</i></button>
+      <span class="fb-sep"></span>
+      <button data-cmd="link" title="Add a link (Cmd/Ctrl+K)">${ICONS.link} Link</button>`
+    : mode === "link" ? `
+      <a class="fb-url" href="${esc(href)}" target="_blank" rel="noopener" title="Open ${esc(href)} (or Cmd/Ctrl-click the text)">${ICONS.external} ${esc(shown)}</a>
+      <span class="fb-sep"></span>
+      <button data-cmd="edit" title="Change the link (Cmd/Ctrl+K)">Edit</button>
+      <button data-cmd="unlink" title="Remove the link, keep the text">Remove</button>`
+    : `
+      <input class="fb-input" type="text" spellcheck="false" placeholder="Paste a link: web address, email or phone" value="${esc(href)}">
+      <button data-cmd="apply" class="fb-primary" title="Apply (Enter)">Apply</button>
+      ${ctx.anchor ? `<button data-cmd="unlink" title="Remove the link, keep the text">Remove</button>` : ""}`;
+  }
+  bubble.hidden = false;
+  placeBubble(ctx);
+}
+
+// Above the selection (below it when the toolbar is in the way), clamped to the viewport.
+function placeBubble(ctx) {
+  let r = ctx.anchor ? ctx.anchor.getBoundingClientRect() : ctx.range.getBoundingClientRect();
+  if (!r.width && !r.height) r = (ctx.anchor || ctx.host).getBoundingClientRect();
+  const w = bubble.offsetWidth, h = bubble.offsetHeight;
+  const toolbarBottom = document.getElementById("toolbar").getBoundingClientRect().bottom;
+  const top = r.top - h - 8 > toolbarBottom ? r.top - h - 8 : r.bottom + 8;
+  const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), document.documentElement.clientWidth - w - 8);
+  bubble.style.top = `${top + window.scrollY}px`;
+  bubble.style.left = `${left + window.scrollX}px`;
+}
+
+document.addEventListener("selectionchange", () => {
+  if (bubbleMode === "input") return;  // the URL box has focus; keep the saved selection
+  const ctx = selectionCtx();
+  if (!ctx || (!ctx.anchor && (ctx.collapsed || !ctx.range.toString().trim()))) return hideBubble();
+  showBubble(ctx.anchor ? "link" : "format", ctx);
+});
+
+function openLinkInput(ctx) {
+  showBubble("input", ctx);
+  const input = bubble.querySelector(".fb-input");
+  input.focus();
+  input.select();
+}
+
+function restoreSelection(ctx) {
+  ctx.host.focus();
+  const sel = document.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(ctx.range);
+}
+
+// Ends in the page's input listener, which sanitizes and saves the change.
+function commitEdit(host) {
+  host.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function linkSelection(ctx, url) {
+  restoreSelection(ctx);
+  document.execCommand("createLink", false, url);  // undoable with Cmd/Ctrl+Z
+}
+
+function removeLink(ctx) {
+  const a = ctx.anchor;
+  const parent = a.parentNode;
+  while (a.firstChild) parent.insertBefore(a.firstChild, a);
+  a.remove();
+  hideBubble();
+  commitEdit(ctx.host);
+}
+
+function applyLink() {
+  const ctx = bubbleCtx;
+  const raw = bubble.querySelector(".fb-input").value;
+  const url = normalizeUrl(raw);
+  if (raw.trim() && !url) {
+    flashStatus("Links must be a web address, email or phone number", true);
+    return;
+  }
+  hideBubble();
+  if (!url) {
+    if (ctx.anchor) removeLink(ctx);
+    else restoreSelection(ctx);
+  } else if (ctx.anchor) {
+    ctx.anchor.setAttribute("href", url);
+    commitEdit(ctx.host);
+    restoreSelection(ctx);
+  } else {
+    linkSelection(ctx, url);
+  }
+}
+
+// Keep the page selection when pressing bubble buttons (but let the URL box take focus).
+bubble.addEventListener("mousedown", (e) => {
+  if (!e.target.closest(".fb-input")) e.preventDefault();
+});
+
+bubble.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-cmd]");
+  if (!btn || !bubbleCtx) return;
+  const cmd = btn.dataset.cmd;
+  if (cmd === "bold" || cmd === "italic") document.execCommand(cmd);
+  else if (cmd === "link" || cmd === "edit") openLinkInput(bubbleCtx);
+  else if (cmd === "apply") applyLink();
+  else if (cmd === "unlink") removeLink(bubbleCtx);
+});
+
+bubble.addEventListener("keydown", (e) => {
+  if (!e.target.closest(".fb-input")) return;
+  if (e.key === "Enter") {
+    e.preventDefault();
+    applyLink();
+  } else if (e.key === "Escape") {
+    e.stopPropagation();
+    const ctx = bubbleCtx;
+    hideBubble();
+    restoreSelection(ctx);
+  }
+});
+
+// Clicking anywhere else while typing a URL cancels it.
+document.addEventListener("mousedown", (e) => {
+  if (bubbleMode === "input" && !bubble.contains(e.target)) hideBubble();
+});
+
 /* ---------------- toolbar ---------------- */
 
 document.getElementById("btnArrange").addEventListener("click", () => {
@@ -599,22 +991,75 @@ document.getElementById("btnArrange").addEventListener("click", () => {
 });
 
 const sectionsPanel = document.getElementById("sectionsPanel");
+const contactPanel = document.getElementById("contactPanel");
+const DROP_PANELS = [sectionsPanel, contactPanel];
 
-function setSectionsPanel(open) {
-  sectionsPanel.hidden = !open;
+// Opening one dropdown closes the other.
+function setPanel(panel, open) {
+  DROP_PANELS.forEach((p) => (p.hidden = p === panel ? !open : true));
   updateToolbar();
 }
 
-document.getElementById("btnSections").addEventListener("click", () => setSectionsPanel(sectionsPanel.hidden));
+document.getElementById("btnSections").addEventListener("click", () => setPanel(sectionsPanel, sectionsPanel.hidden));
+document.getElementById("btnContact").addEventListener("click", () => setPanel(contactPanel, contactPanel.hidden));
 
-// Close on outside click / Esc. The panel stays open while working inside it.
+// Close on outside click / Esc. A panel stays open while working inside it.
 // composedPath, not target.closest: panel clicks re-render it, detaching the target before this runs.
 document.addEventListener("click", (e) => {
-  if (!sectionsPanel.hidden && !e.composedPath().some((n) => n.id === "sectionsWrap")) setSectionsPanel(false);
+  const open = DROP_PANELS.find((p) => !p.hidden);
+  if (open && !e.composedPath().includes(open.parentElement)) setPanel(open, false);
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !sectionsPanel.hidden) setSectionsPanel(false);
+  const open = DROP_PANELS.find((p) => !p.hidden);
+  if (e.key === "Escape" && open) setPanel(open, false);
 });
+
+contactPanel.addEventListener("change", (e) => {
+  const box = e.target.closest('input[data-op="toggle"]');
+  if (!box || !data) return;
+  const key = box.dataset.key;
+  data.contactFields = data.contactFields.filter((k) => k !== key);
+  if (box.checked) {
+    if (data.contact[key] === undefined) data.contact[key] = "";
+    data.contactFields.push(key);
+  }
+  render();
+  saveSoon();
+  flashStatus(`${contactLabel(key)} ${box.checked ? "added" : "removed"}`);
+  if (box.checked) focusEmptyContact(key);
+});
+
+contactPanel.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-op]");
+  if (!btn || !data) return;
+  const key = btn.dataset.key;
+  const list = data.contactFields;
+  if (btn.dataset.op === "up" || btn.dataset.op === "down") {
+    const i = list.indexOf(key);
+    const j = i + (btn.dataset.op === "up" ? -1 : 1);
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+  } else if (btn.dataset.op === "delete") {
+    delete data.contact[key];
+  } else if (btn.dataset.op === "custom") {
+    let n = 1;
+    while (`custom${n}` in data.contact) n++;
+    data.contact[`custom${n}`] = "";
+    list.push(`custom${n}`);
+    render();
+    saveSoon();
+    focusEmptyContact(`custom${n}`);
+    return;
+  }
+  render();
+  saveSoon();
+});
+
+// A freshly ticked item is usually empty: put the caret in it so typing fills it straight away.
+function focusEmptyContact(key) {
+  const el = pageEl.querySelector(`[data-path="contact.${key}"]`);
+  if (el && !el.textContent.trim()) el.focus();
+}
 
 sectionsPanel.addEventListener("change", (e) => {
   const box = e.target.closest('input[data-op="toggle"]');
@@ -720,7 +1165,7 @@ async function buildDocxBlob() {
   if (!d) throw new Error("The DOCX library (vendor/docx.umd.js) didn't load.");
   const {
     Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
-    WidthType, BorderStyle, ShadingType, AlignmentType, VerticalAlign
+    WidthType, BorderStyle, ShadingType, AlignmentType, VerticalAlign, ExternalHyperlink
   } = d;
   const ats = isAts();
 
@@ -729,23 +1174,38 @@ async function buildDocxBlob() {
   const NONE = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
   const noBorders = { top: NONE, bottom: NONE, left: NONE, right: NONE };
 
+  // Inline <a href> becomes a real Word hyperlink, underlined like on the page.
   function runsFromHtml(html, base = {}) {
-    const out = [];
+    const top = [];
     const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
-    (function walk(node, fmt) {
+    (function walk(node, fmt, out) {
       node.childNodes.forEach((n) => {
         if (n.nodeType === 3) {
-          if (n.textContent) out.push(new TextRun({ text: n.textContent, font: FONT, size: 17, color: BODY, ...base, bold: base.bold || fmt.bold, italics: base.italics || fmt.italic }));
+          if (n.textContent) out.push(new TextRun({
+            text: n.textContent, font: FONT, size: 17, color: BODY, ...base,
+            bold: base.bold || fmt.bold, italics: base.italics || fmt.italic,
+            ...(fmt.underline ? { underline: {} } : {})
+          }));
         } else if (n.nodeType === 1) {
           if (n.tagName === "BR") { out.push(new TextRun({ break: 1 })); return; }
-          walk(n, {
+          const href = n.tagName === "A" && !fmt.link ? safeHref(n.getAttribute("href")) : "";
+          const inner = {
             bold: fmt.bold || n.tagName === "B" || n.tagName === "STRONG",
-            italic: fmt.italic || n.tagName === "I" || n.tagName === "EM"
-          });
+            italic: fmt.italic || n.tagName === "I" || n.tagName === "EM",
+            underline: fmt.underline || n.tagName === "U" || !!href,
+            link: fmt.link || !!href
+          };
+          if (href) {
+            const runs = [];
+            walk(n, inner, runs);
+            if (runs.length) out.push(new ExternalHyperlink({ link: href, children: runs }));
+          } else {
+            walk(n, inner, out);
+          }
         }
       });
-    })(doc.body.firstChild, {});
-    return out;
+    })(doc.body.firstChild, {}, top);
+    return top;
   }
 
   const P = Paragraph, T = TextRun;
@@ -753,7 +1213,7 @@ async function buildDocxBlob() {
   const metaTab = fullWidth ? 10100 : 4800;
   const heading = (text) =>
     new P({
-      children: [new T({ text: htmlToText(text), font: FONT, bold: true, size: 26, color: INK })],
+      children: runsFromHtml(text, { bold: true, size: 26, color: INK }),
       spacing: { before: 260, after: 120 }
     });
   const bullet = (html, size = 17) =>
@@ -766,8 +1226,9 @@ async function buildDocxBlob() {
     new P({
       tabStops: [{ type: d.TabStopType.RIGHT, position: metaTab }],
       children: [
-        new T({ text: htmlToText(leftText), font: FONT, italics: true, size: 14, color: MUTED }),
-        new T({ text: "\t" + htmlToText(rightText || ""), font: FONT, italics: true, size: 14, color: MUTED })
+        ...runsFromHtml(leftText, { italics: true, size: 14, color: MUTED }),
+        new T({ text: "\t", font: FONT, italics: true, size: 14, color: MUTED }),
+        ...runsFromHtml(rightText || "", { italics: true, size: 14, color: MUTED })
       ],
       spacing: { after: 40 }
     });
@@ -820,9 +1281,15 @@ async function buildDocxBlob() {
       top: { style: BorderStyle.SINGLE, size: 18, color: "000000", space: 4 },
       bottom: { style: BorderStyle.SINGLE, size: 18, color: "000000", space: 4 }
     },
-    children: [
-      new T({ text: [data.contact.email, data.contact.phone, data.contact.location, data.contact.linkedin].map(htmlToText).join("    |    "), font: FONT, size: 17, color: INK })
-    ],
+    // Same rules as the page: empty items are skipped, linkable ones become hyperlinks.
+    children: data.contactFields.filter((k) => htmlToText(data.contact[k] || "").trim()).flatMap((k, i) => {
+      const runs = runsFromHtml(data.contact[k], { size: 17, color: INK });
+      const href = contactHref(k);
+      return [
+        ...(i ? [new T({ text: "    |    ", font: FONT, size: 17, color: INK })] : []),
+        ...(href ? [new ExternalHyperlink({ link: href, children: runs })] : runs)
+      ];
+    }),
     spacing: { before: 120, after: 220 }
   });
 
@@ -834,7 +1301,7 @@ async function buildDocxBlob() {
         out.push(new P({ children: runsFromHtml(e.role, { bold: true, size: 21, color: INK }), spacing: { before: 100 } }));
         out.push(new P({ children: runsFromHtml(e.org, { size: 21, color: "33373C" }), spacing: { after: 30 } }));
         out.push(metaLine(e.dates, e.location));
-        if (e.label) out.push(new P({ children: [new T({ text: htmlToText(e.label), font: FONT, italics: true, size: 14, color: MUTED })], spacing: { after: 40 } }));
+        if (e.label) out.push(new P({ children: runsFromHtml(e.label, { italics: true, size: 14, color: MUTED }), spacing: { after: 40 } }));
         e.bullets.forEach((b) => out.push(bullet(b)));
       });
       return out;
@@ -845,7 +1312,7 @@ async function buildDocxBlob() {
         out.push(new P({ children: runsFromHtml(e.degree, { bold: true, size: 21, color: INK }), spacing: { before: 100 } }));
         out.push(new P({ children: runsFromHtml(e.school, { size: 21, color: "33373C" }), spacing: { after: 30 } }));
         out.push(metaLine(e.dates, e.meta));
-        if (e.label) out.push(new P({ children: [new T({ text: htmlToText(e.label), font: FONT, italics: true, size: 14, color: MUTED })], spacing: { after: 40 } }));
+        if (e.label) out.push(new P({ children: runsFromHtml(e.label, { italics: true, size: 14, color: MUTED }), spacing: { after: 40 } }));
         e.bullets.forEach((b) => out.push(bullet(b)));
       });
       return out;
@@ -854,7 +1321,8 @@ async function buildDocxBlob() {
       const out = [heading(data.headings.skills)];
       const runs = [];
       data.skills.forEach((s, i) => {
-        runs.push(new T({ text: ` ${htmlToText(s)} `, font: FONT, size: 17, color: "FFFFFF", shading: { type: ShadingType.CLEAR, fill: NAVY } }));
+        const pill = { size: 17, color: "FFFFFF", shading: { type: ShadingType.CLEAR, fill: NAVY } };
+        runs.push(new T({ text: " ", font: FONT, ...pill }), ...runsFromHtml(s, pill), new T({ text: " ", font: FONT, ...pill }));
         if (i < data.skills.length - 1) runs.push(new T({ text: "  ", font: FONT, size: 17 }));
       });
       out.push(new P({ children: runs, spacing: { after: 120, line: 340 } }));
@@ -898,7 +1366,10 @@ async function buildDocxBlob() {
     interests() {
       return [
         heading(data.headings.interests),
-        new P({ children: [new T({ text: data.interests.map(htmlToText).join(ats ? ", " : "   |   "), font: FONT, size: 17, color: BODY })] })
+        new P({ children: data.interests.flatMap((s, i) => [
+          ...(i ? [new T({ text: ats ? ", " : "   |   ", font: FONT, size: 17, color: BODY })] : []),
+          ...runsFromHtml(s)
+        ]) })
       ];
     }
   };

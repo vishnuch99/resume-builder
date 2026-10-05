@@ -20,8 +20,12 @@ window.RESUME_DATA = {
     email: "alex.morgan@example.com",
     phone: "+1-555-0100",
     location: "Springfield, USA",
-    linkedin: "linkedin.com/in/example"
+    linkedin: "linkedin.com/in/example",
+    github: "github.com/example"
   },
+  // Contact-bar items shown, in order. Keys come from CONTACT_FIELDS in app.js, or custom1, custom2, ….
+  // Values of unticked items stay in `contact`.
+  contactFields: ["email", "phone", "location", "linkedin", "github"],
   headings: {
     experience: "EXPERIENCE",
     education: "EDUCATION",

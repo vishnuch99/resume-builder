@@ -18,7 +18,8 @@ that mode.)
 ## Editing
 
 - **Click any text** to edit it in place — name, summary, bullets, dates, even section headings.
-- **Cmd+B / Ctrl+B** toggles bold on selected text (Cmd+I for italics).
+- **Cmd+B / Ctrl+B** toggles bold on selected text (Cmd+I for italics), or use the
+  **B** / **I** buttons in the bubble that appears when you select text.
 - **Hover** over any entry, bullet, or row: a control cluster appears **inside** its
   top-right corner with **↑ ↓** (reorder) and **×** (delete).
 - **Arrange** (toolbar): shows all controls on everything at once — jobs, bullets,
@@ -35,9 +36,25 @@ that mode.)
   - If a column ends up empty, the other one spans the full page width.
   - Hidden sections are saved with your content, so they're included in Export/Import
     JSON and cleared by Reset.
+- **Contact ▾** (toolbar): choose what goes in the contact bar under the summary.
+  Tick any of ~30 items (website, portfolio, GitHub, GitLab, Stack Overflow, Kaggle,
+  Behance, Dribbble, YouTube, IMDb, ORCID, Google Scholar, X, Bluesky, and details like
+  work authorization, availability, licence/registration number, clearance, pronouns…),
+  or add a **+ Custom item**. A newly ticked item appears empty with a grey hint and the
+  caret in it, so just type. **↑ ↓** reorder the shown items.
+  - Unticking keeps what you typed; empty items are never printed.
+  - Emails, phone numbers and web addresses become **clickable links** in the PDF and
+    DOCX automatically (`mailto:`, `tel:`, `https://`).
 - **Photo**: click it to upload a different one.
-- **Links**: hover next to a company/project name and click the faint ↗ icon to set a
-  URL; alt-click an existing icon to change or remove it.
+- **Links on any text**: select some text (a word in a bullet, a skill, your name, a
+  heading…) and click **Link** in the little bubble that pops up, or press
+  **Cmd/Ctrl+K**. Type or paste a web address, email or phone number and press Enter.
+  - Shortcut: select text and **paste a URL** over it to link it in one step.
+  - Put the caret in a link to see where it goes, **Edit** it or **Remove** it (the text stays).
+  - **Cmd/Ctrl-click** a link to open it; a plain click just places the caret.
+  - Links are subtly underlined and stay clickable in the PDF and DOCX.
+  - The faint ↗ icon next to company/project names still works too: click to set a URL,
+    alt-click to change or remove it.
 - **Cmd+S** force-saves any time (it also autosaves ~0.4s after you stop typing, and
   right before printing or closing).
 

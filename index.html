@@ -14,9 +14,13 @@
     <span class="brand">Resume Builder</span>
     <button id="btnArrange" title="Show move/delete controls on every item">Arrange</button>
     <button id="btnLayout" title="Toggle the ATS-friendly single-column layout">Layout</button>
-    <span id="sectionsWrap">
+    <span id="sectionsWrap" class="drop-wrap">
       <button id="btnSections" title="Show/hide sections and move them between columns">Sections ▾</button>
-      <div id="sectionsPanel" class="sections-panel" hidden></div>
+      <div id="sectionsPanel" class="drop-panel" hidden></div>
+    </span>
+    <span id="contactWrap" class="drop-wrap">
+      <button id="btnContact" title="Choose what goes in the contact bar: GitHub, website, portfolio, and more">Contact ▾</button>
+      <div id="contactPanel" class="drop-panel contact-panel" hidden></div>
     </span>
     <span class="tsep"></span>
     <button id="btnPrint" class="primary" title="Opens the print dialog — choose 'Save as PDF'">Export PDF</button>
@@ -26,7 +30,7 @@
     <button id="btnReset" title="Restore the original resume content">Reset</button>
     <span id="statusMsg"></span>
     <span class="spacer"></span>
-    <span class="hint">Click text to edit &middot; Cmd/Ctrl+B bold</span>
+    <span class="hint">Click text to edit &middot; select text to bold or link it (Cmd/Ctrl+K)</span>
     <span class="hint" id="modeNote"></span>
   </div>
 
