@@ -24,6 +24,17 @@ that mode.)
 - **Arrange** (toolbar): shows all controls on everything at once — jobs, bullets,
   skills, projects, languages, interests, and whole sections (↑↓ next to each heading).
   Skill/interest chips get **‹ ›** to move left/right and **×** to delete.
+- **Section headings** get **→** / **←** (2-col layout) to send the whole section to the
+  other column — it lands at the bottom; nudge it into place with ↑ ↓. In the ATS layout
+  the page is one flow, so ↑ ↓ carry a section across the left/right boundary instead.
+- **Sections ▾** (toolbar): one panel listing every section by column.
+  - **Checkbox** shows/hides a section. Hidden sections are left out of the page, PDF
+    and DOCX but are **not deleted** — re-check to bring one back exactly where it was.
+  - **↑ ↓** reorder (hidden rows too, so you can place one before re-showing it), and
+    **→ / ←** switch columns.
+  - If a column ends up empty, the other one spans the full page width.
+  - Hidden sections are saved with your content, so they're included in Export/Import
+    JSON and cleared by Reset.
 - **Photo**: click it to upload a different one.
 - **Links**: hover next to a company/project name and click the faint ↗ icon to set a
   URL; alt-click an existing icon to change or remove it.

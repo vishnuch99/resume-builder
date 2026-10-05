@@ -31,7 +31,23 @@ function migrate(d) {
   for (const k of Object.keys(def)) if (d[k] === undefined) d[k] = JSON.parse(JSON.stringify(def[k]));
   for (const k of Object.keys(def.headings)) if (d.headings[k] === undefined) d.headings[k] = def.headings[k];
   d.settings = Object.assign({ ats: false }, d.settings);
+  normalizeSections(d);
   return d;
+}
+
+// Every known section must appear exactly once across left/right; unknown keys are dropped.
+function normalizeSections(d) {
+  const known = Object.keys(window.RESUME_DATA.headings);
+  const seen = new Set();
+  const order = d.sectionOrder && typeof d.sectionOrder === "object" ? d.sectionOrder : {};
+  const clean = (list) => (Array.isArray(list) ? list : []).filter((k) => {
+    if (!known.includes(k) || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  d.sectionOrder = { left: clean(order.left), right: clean(order.right) };
+  for (const k of known) if (!seen.has(k)) d.sectionOrder.right.push(k);
+  d.hiddenSections = [...new Set(Array.isArray(d.hiddenSections) ? d.hiddenSections : [])].filter((k) => known.includes(k));
 }
 
 let saveTimer = null;
@@ -251,12 +267,81 @@ const SECTION_BODY = {
   }
 };
 
-function renderSection(key, col, idx) {
+/* ---------------- section ops ----------------
+   Hidden sections keep their slot in sectionOrder so re-showing restores them in place. */
+
+function isHidden(key) {
+  return data.hiddenSections.includes(key);
+}
+function setHidden(key, hidden) {
+  data.hiddenSections = data.hiddenSections.filter((k) => k !== key);
+  if (hidden) data.hiddenSections.push(key);
+}
+function colOf(key) {
+  return data.sectionOrder.left.includes(key) ? "left" : "right";
+}
+function visibleSections(col) {
+  return data.sectionOrder[col].filter((k) => SECTION_BODY[k] && !isHidden(k));
+}
+
+// Move a section one step up (-1) or down (1).
+// skipHidden: step past hidden neighbours (on the page they're invisible, so swapping with one looks like a no-op).
+// cross: at the end of a column, carry the section into the other one (left flows into right).
+function moveSection(key, dir, { skipHidden = false, cross = false } = {}) {
+  const col = colOf(key);
+  const arr = data.sectionOrder[col];
+  const i = arr.indexOf(key);
+  let j = i + dir;
+  while (skipHidden && j >= 0 && j < arr.length && isHidden(arr[j])) j += dir;
+  if (j >= 0 && j < arr.length) {
+    arr.splice(i, 1);
+    arr.splice(j, 0, key);
+    return true;
+  }
+  if (!cross) return false;
+  if (dir === 1 && col === "left") {
+    arr.splice(i, 1);
+    data.sectionOrder.right.unshift(key);
+    return true;
+  }
+  if (dir === -1 && col === "right") {
+    arr.splice(i, 1);
+    data.sectionOrder.left.push(key);
+    return true;
+  }
+  return false;
+}
+
+// Send a section to the bottom of the other column.
+function switchColumn(key) {
+  const from = colOf(key);
+  const to = from === "left" ? "right" : "left";
+  data.sectionOrder[from] = data.sectionOrder[from].filter((k) => k !== key);
+  data.sectionOrder[to].push(key);
+}
+
+function sectionLabel(key) {
+  return htmlToText(data.headings[key] || key).trim().toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+}
+
+// Heading control: ↑ ↓ plus a column switch in the 2-col layout (in ATS, ↑ ↓ already cross the left/right boundary).
+function sectionCtl(key, col) {
+  const sw = isAts() ? "" : col === "left"
+    ? `<button class="sec-sw" data-key="${key}" title="Move to right column" tabindex="-1">→</button>`
+    : `<button class="sec-sw" data-key="${key}" title="Move to left column" tabindex="-1">←</button>`;
+  return `<span class="ctl" contenteditable="false">
+    <button class="sec-mv" data-move="-1" data-key="${key}" title="Move section up" tabindex="-1">↑</button>
+    <button class="sec-mv" data-move="1" data-key="${key}" title="Move section down" tabindex="-1">↓</button>
+    ${sw}
+  </span>`;
+}
+
+function renderSection(key, col) {
   if (!SECTION_BODY[key]) return "";
   return `
     <div class="section">
       <div class="section-head item">
-        ${ctl(`sectionOrder.${col}.${idx}`, { del: false })}
+        ${sectionCtl(key, col)}
         ${ed(`headings.${key}`, "section-title", "h2")}
       </div>
       ${SECTION_BODY[key]()}
@@ -289,14 +374,18 @@ function render() {
     .map(([icon, path]) => `<span class="citem">${ats ? "" : ICONS[icon]}${ed(path, "", "span")}</span>`)
     .join(ats ? `<span class="csep">|</span>` : "");
 
-  const leftSections = data.sectionOrder.left.map((k, i) => renderSection(k, "left", i)).join("");
-  const rightSections = data.sectionOrder.right.map((k, i) => renderSection(k, "right", i)).join("");
+  const leftKeys = visibleSections("left");
+  const rightKeys = visibleSections("right");
+  const leftSections = leftKeys.map((k) => renderSection(k, "left")).join("");
+  const rightSections = rightKeys.map((k) => renderSection(k, "right")).join("");
 
+  // An empty column gives its width to the other instead of leaving a blank gutter.
+  const oneSided = !leftKeys.length || !rightKeys.length;
   const columns = ats
     ? `<div class="col-single">${leftSections}${rightSections}</div>`
-    : `<div class="columns">
-        <div class="col-left">${leftSections}</div>
-        <div class="col-right">${rightSections}</div>
+    : `<div class="columns${oneSided ? " single" : ""}">
+        ${leftKeys.length ? `<div class="col-left">${leftSections}</div>` : ""}
+        ${rightKeys.length ? `<div class="col-right">${rightSections}</div>` : ""}
       </div>`;
 
   page.innerHTML = `
@@ -318,6 +407,8 @@ function updateToolbar() {
   const ats = isAts();
   document.getElementById("btnLayout").textContent = ats ? "Layout: ATS (1 col)" : "Layout: Original (2 col)";
   document.getElementById("btnArrange").classList.toggle("active", document.body.classList.contains("arrange"));
+  document.getElementById("btnSections").classList.toggle("active", !document.getElementById("sectionsPanel").hidden);
+  renderSectionsPanel();
   const note = document.getElementById("modeNote");
   if (HTTP_MODE) {
     note.textContent = "Auto-saving to resume-data.json";
@@ -326,6 +417,38 @@ function updateToolbar() {
     note.textContent = "⚠ Opened from disk — edits may not survive a browser restart. Double-click start.command for reliable file saving.";
     note.classList.add("warn");
   }
+}
+
+// Toolbar "Sections" panel: show/hide, reorder and switch columns for every section.
+function renderSectionsPanel() {
+  const ats = isAts();
+  const group = (col) => {
+    const keys = data.sectionOrder[col].filter((k) => SECTION_BODY[k]);
+    const title = ats
+      ? (col === "left" ? "Prints first" : "Prints second")
+      : (col === "left" ? "Left column" : "Right column");
+    const arrow = col === "left" ? "→" : "←";
+    const swTitle = col === "left" ? (ats ? "Move to second half" : "Move to right column") : (ats ? "Move to first half" : "Move to left column");
+    const rows = keys.map((k) => {
+      const hidden = isHidden(k);
+      return `
+        <div class="sp-row${hidden ? " is-hidden" : ""}">
+          <label><input type="checkbox" data-op="toggle" data-key="${k}" ${hidden ? "" : "checked"}> ${esc(sectionLabel(k))}</label>
+          <button data-op="up" data-key="${k}" title="Move up">↑</button>
+          <button data-op="down" data-key="${k}" title="Move down">↓</button>
+          <button data-op="switch" data-key="${k}" title="${swTitle}">${arrow}</button>
+        </div>`;
+    }).join("");
+    return `
+      <div class="sp-group">
+        <div class="sp-head">${title}</div>
+        ${rows || `<div class="sp-empty">(empty) — move a section here</div>`}
+      </div>`;
+  };
+  document.getElementById("sectionsPanel").innerHTML =
+    group("left") + group("right") +
+    (ats ? `<div class="sp-note">ATS layout is a single column: the first group prints above the second.</div>` : "") +
+    `<div class="sp-note">Unchecked sections are hidden, not deleted — their content is kept.</div>`;
 }
 
 /* ---------------- templates for "add" ---------------- */
@@ -377,6 +500,25 @@ pageEl.addEventListener("paste", (e) => {
 
 pageEl.addEventListener("click", (e) => {
   if (!data) return;
+
+  const secMv = e.target.closest(".sec-mv");
+  if (secMv) {
+    // On the page hidden sections are invisible, so step past them; in ATS the page is one flow, so cross columns.
+    if (moveSection(secMv.dataset.key, Number(secMv.dataset.move), { skipHidden: true, cross: isAts() })) {
+      render();
+      saveSoon();
+    }
+    return;
+  }
+
+  const secSw = e.target.closest(".sec-sw");
+  if (secSw) {
+    switchColumn(secSw.dataset.key);
+    render();
+    saveSoon();
+    flashStatus(`${sectionLabel(secSw.dataset.key)} moved to ${colOf(secSw.dataset.key)} column`);
+    return;
+  }
 
   const mv = e.target.closest(".mv");
   if (mv) {
@@ -451,6 +593,49 @@ document.getElementById("photoInput").addEventListener("change", (e) => {
 document.getElementById("btnArrange").addEventListener("click", () => {
   document.body.classList.toggle("arrange");
   updateToolbar();
+});
+
+const sectionsPanel = document.getElementById("sectionsPanel");
+
+function setSectionsPanel(open) {
+  sectionsPanel.hidden = !open;
+  updateToolbar();
+}
+
+document.getElementById("btnSections").addEventListener("click", () => setSectionsPanel(sectionsPanel.hidden));
+
+// Close on outside click / Esc. The panel stays open while working inside it.
+// composedPath, not target.closest: panel clicks re-render it, detaching the target before this runs.
+document.addEventListener("click", (e) => {
+  if (!sectionsPanel.hidden && !e.composedPath().some((n) => n.id === "sectionsWrap")) setSectionsPanel(false);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !sectionsPanel.hidden) setSectionsPanel(false);
+});
+
+sectionsPanel.addEventListener("change", (e) => {
+  const box = e.target.closest('input[data-op="toggle"]');
+  if (!box || !data) return;
+  const key = box.dataset.key;
+  setHidden(key, !box.checked);
+  render();
+  saveSoon();
+  flashStatus(`${sectionLabel(key)} ${box.checked ? "shown" : "hidden"}`);
+});
+
+sectionsPanel.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-op]");
+  if (!btn || !data) return;
+  const key = btn.dataset.key;
+  const op = btn.dataset.op;
+  // The panel lists hidden rows too, so step one row at a time; the groups chain left → right.
+  const changed = op === "switch"
+    ? (switchColumn(key), true)
+    : moveSection(key, op === "up" ? -1 : 1, { cross: true });
+  if (changed) {
+    render();
+    saveSoon();
+  }
 });
 
 document.getElementById("btnLayout").addEventListener("click", () => {
@@ -561,7 +746,8 @@ async function buildDocxBlob() {
   }
 
   const P = Paragraph, T = TextRun;
-  const metaTab = ats ? 10100 : 4800;
+  const fullWidth = ats || !visibleSections("left").length || !visibleSections("right").length;
+  const metaTab = fullWidth ? 10100 : 4800;
   const heading = (text) =>
     new P({
       children: [new T({ text: htmlToText(text), font: FONT, bold: true, size: 26, color: INK })],
@@ -714,12 +900,14 @@ async function buildDocxBlob() {
     }
   };
 
-  const left = data.sectionOrder.left.flatMap((k) => (SEC[k] ? SEC[k]() : []));
-  const right = data.sectionOrder.right.flatMap((k) => (SEC[k] ? SEC[k]() : []));
+  const shown = (col) => data.sectionOrder[col].filter((k) => SEC[k] && !isHidden(k));
+  const left = shown("left").flatMap((k) => SEC[k]());
+  const right = shown("right").flatMap((k) => SEC[k]());
 
   let body;
-  if (ats) {
+  if (fullWidth) {
     // Single flow, no layout tables — the structure ATS parsers handle best.
+    // Also used when one column is empty, so Word doesn't get a blank cell.
     body = [...left, ...right];
   } else {
     body = [
