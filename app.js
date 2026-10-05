@@ -353,6 +353,9 @@ function renderSection(key, col) {
 function render() {
   const ats = isAts();
   const page = document.getElementById("page");
+  // The browser uses the title as the default "Save as PDF" file name.
+  const person = htmlToText(data.name).trim();
+  document.title = person ? `Resume Builder — ${person}` : "Resume Builder";
   page.classList.toggle("ats", ats);
 
   const photo = data.photo

@@ -72,7 +72,7 @@ The choice is saved with your data and applies to PDF and DOCX exports alike.
 | `resume-data.json` | **Your live resume content.** Created on first save; back this up. |
 | `index.html` | The app shell. |
 | `data.js` | The original/default content (what *Reset* restores). |
-| `photo.js` | Your profile photo (extracted from the original PDF, base64). |
+| `photo.js` | Default profile photo as a base64 data URL (empty in the repo — upload yours in the app). |
 | `styles.css` | Layout/typography mirroring the original template + ATS variant. |
 | `app.js` | Rendering, editing, reordering, persistence, and export logic. |
 | `vendor/docx.umd.js` | The [docx](https://github.com/dolanmiu/docx) library (v8.5.0), vendored so DOCX export works offline. |
