@@ -321,6 +321,10 @@ body.arrange .entry, body.arrange .project { padding-right: 18mm; }
 
 /* ---------- Print ---------- */
 
+/* @page margin stays 0: Chrome prints its date/title/URL/page-number headers and
+   footers inside the page margin, so with no margin there is nowhere to draw them.
+   The per-page top/bottom spacing comes from .page's padding instead, repeated at
+   every page break by box-decoration-break: clone. */
 @page { size: A4; margin: 0; }
 
 @media print {
@@ -330,6 +334,10 @@ body.arrange .entry, body.arrange .project { padding-right: 18mm; }
     width: 210mm;
     min-height: auto;
     margin: 0;
+    padding-top: 12mm;
+    padding-bottom: 12mm;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
     box-shadow: none;
   }
   body.arrange .pill-wrap { padding-top: 0; row-gap: 1.8mm; }
